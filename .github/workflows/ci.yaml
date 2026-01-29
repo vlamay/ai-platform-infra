@@ -1,0 +1,166 @@
+name: CI - Kubernetes Manifests Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  validate-manifests:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Validate YAML syntax
+        run: |
+          echo "Validating YAML syntax..."
+          find kubernetes -name '*.yaml' -o -name '*.yml' | while read file; do
+            echo "Checking $file"
+            kubectl apply --dry-run=client -f "$file" || exit 1
+          done
+
+      - name: Install kubeconform
+        run: |
+          wget https://github.com/yannh/kubeconform/releases/download/v0.6.3/kubeconform-linux-amd64.tar.gz
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate Kubernetes schemas
+        run: |
+          echo "Validating Kubernetes schemas with kubeconform..."
+          find kubernetes -name '*.yaml' -o -name '*.yml' | while read file; do
+            echo "Validating $file"
+            kubeconform -strict -summary "$file" || exit 1
+          done
+
+      - name: Check for common issues
+        run: |
+          echo "Checking for common issues..."
+          # Check for missing resource limits
+          if grep -r "resources:" kubernetes/ | grep -v "requests:" | grep -v "limits:"; then
+            echo "Warning: Some resources might be missing requests or limits"
+          fi
+          
+          # Check for latest tag usage
+          if grep -r "image:.*:latest" kubernetes/; then
+            echo "Error: Found 'latest' tag in images. Use specific versions."
+            exit 1
+          fi
+
+      - name: Validate Prometheus rules
+        run: |
+          echo "Validating Prometheus rules syntax..."
+          docker run --rm -v $PWD:/repo prom/prometheus:latest \
+            promtool check rules /repo/kubernetes/observability/prometheus-rules.yaml
+
+  lint-python:
+    name: Lint Python Applications
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort
+
+      - name: Lint with flake8
+        run: |
+          # Stop the build if there are Python syntax errors or undefined names
+          flake8 apps/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 apps/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Check formatting with black
+        run: |
+          black --check apps/
+
+      - name: Check import sorting with isort
+        run: |
+          isort --check-only apps/
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'kubernetes/'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        app: [api-gateway, llm-inference]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.app }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/${{ matrix.app }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

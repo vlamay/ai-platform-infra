@@ -1,0 +1,260 @@
+{
+    "dashboard": {
+        "title": "AI Platform Overview",
+        "tags": [
+            "ai-platform",
+            "slo"
+        ],
+        "timezone": "browser",
+        "refresh": "30s",
+        "panels": [
+            {
+                "id": 1,
+                "title": "Request Rate (RPS)",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "sum(rate(api_gateway_requests_total[5m]))",
+                        "legendFormat": "Total RPS"
+                    }
+                ],
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 0
+                }
+            },
+            {
+                "id": 2,
+                "title": "P95 Latency (SLO: < 500ms)",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "histogram_quantile(0.95, rate(api_gateway_request_duration_seconds_bucket[5m])) * 1000",
+                        "legendFormat": "API Gateway p95"
+                    },
+                    {
+                        "expr": "histogram_quantile(0.95, rate(llm_inference_duration_seconds_bucket[5m])) * 1000",
+                        "legendFormat": "LLM Inference p95"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "ms",
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                                {
+                                    "value": null,
+                                    "color": "green"
+                                },
+                                {
+                                    "value": 500,
+                                    "color": "red"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 0
+                }
+            },
+            {
+                "id": 3,
+                "title": "Error Rate (SLO: < 1%)",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "(sum(rate(api_gateway_requests_total{status=~\"5..\"}[5m])) / sum(rate(api_gateway_requests_total[5m]))) * 100",
+                        "legendFormat": "Error Rate %"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "percent",
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                                {
+                                    "value": null,
+                                    "color": "green"
+                                },
+                                {
+                                    "value": 1,
+                                    "color": "red"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 8
+                }
+            },
+            {
+                "id": 4,
+                "title": "Service Availability (SLO: > 99.9%)",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "(1 - (sum(rate(api_gateway_requests_total{status=~\"5..\"}[5m])) / sum(rate(api_gateway_requests_total[5m])))) * 100",
+                        "legendFormat": "Availability"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "percent",
+                        "thresholds": {
+                            "mode": "absolute",
+                            "steps": [
+                                {
+                                    "value": null,
+                                    "color": "red"
+                                },
+                                {
+                                    "value": 99.9,
+                                    "color": "green"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 8
+                }
+            },
+            {
+                "id": 5,
+                "title": "Token Usage Rate",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "sum(rate(llm_tokens_total{type=\"prompt\"}[5m]))",
+                        "legendFormat": "Prompt Tokens/s"
+                    },
+                    {
+                        "expr": "sum(rate(llm_tokens_total{type=\"completion\"}[5m]))",
+                        "legendFormat": "Completion Tokens/s"
+                    }
+                ],
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 16
+                }
+            },
+            {
+                "id": 6,
+                "title": "Estimated Cost per 1K Requests",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "(sum(rate(llm_tokens_total{type=\"completion\"}[5m])) * 0.002 / 1000 + sum(rate(llm_tokens_total{type=\"prompt\"}[5m])) * 0.001 / 1000) / (sum(rate(api_gateway_requests_total[5m])) / 1000)",
+                        "legendFormat": "Cost/$1K requests"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "currencyUSD"
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 16
+                }
+            },
+            {
+                "id": 7,
+                "title": "Pod Resource Usage - CPU",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ai-services\", container!=\"\"}[5m])) by (pod) * 100",
+                        "legendFormat": "{{pod}}"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "percent"
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 0,
+                    "y": 24
+                }
+            },
+            {
+                "id": 8,
+                "title": "Pod Resource Usage - Memory",
+                "type": "graph",
+                "targets": [
+                    {
+                        "expr": "sum(container_memory_working_set_bytes{namespace=\"ai-services\", container!=\"\"}) by (pod) / 1024 / 1024",
+                        "legendFormat": "{{pod}}"
+                    }
+                ],
+                "fieldConfig": {
+                    "defaults": {
+                        "unit": "MiB"
+                    }
+                },
+                "gridPos": {
+                    "h": 8,
+                    "w": 12,
+                    "x": 12,
+                    "y": 24
+                }
+            },
+            {
+                "id": 9,
+                "title": "Active Pods",
+                "type": "stat",
+                "targets": [
+                    {
+                        "expr": "count(up{job=~\"api-gateway|llm-inference\"} == 1)",
+                        "legendFormat": "Active Pods"
+                    }
+                ],
+                "gridPos": {
+                    "h": 4,
+                    "w": 6,
+                    "x": 0,
+                    "y": 32
+                }
+            },
+            {
+                "id": 10,
+                "title": "HPA Status",
+                "type": "table",
+                "targets": [
+                    {
+                        "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"ai-services\"}",
+                        "format": "table"
+                    }
+                ],
+                "gridPos": {
+                    "h": 8,
+                    "w": 18,
+                    "x": 6,
+                    "y": 32
+                }
+            }
+        ]
+    }
+}

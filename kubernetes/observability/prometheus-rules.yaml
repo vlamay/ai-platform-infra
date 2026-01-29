@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: observability
+data:
+  ai-platform-alerts.yml: |
+    groups:
+      - name: ai_platform_slo
+        interval: 30s
+        rules:
+          # SLO: P95 Latency < 500ms
+          - alert: HighAPILatency
+            expr: histogram_quantile(0.95, rate(api_gateway_request_duration_seconds_bucket[5m])) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+              slo: latency
+            annotations:
+              summary: "High API Gateway latency (p95 > 500ms)"
+              description: "API Gateway p95 latency is {{ $value }}s, exceeding SLO of 500ms for 5 minutes."
+
+          - alert: HighLLMLatency
+            expr: histogram_quantile(0.95, rate(llm_inference_duration_seconds_bucket[5m])) > 1.0
+            for: 5m
+            labels:
+              severity: warning
+              slo: latency
+            annotations:
+              summary: "High LLM inference latency (p95 > 1s)"
+              description: "LLM inference p95 latency is {{ $value }}s, exceeding threshold for 5 minutes."
+
+          # SLO: Error Rate < 1%
+          - alert: HighErrorRate
+            expr: |
+              (
+                sum(rate(api_gateway_requests_total{status=~"5.."}[5m]))
+                /
+                sum(rate(api_gateway_requests_total[5m]))
+              ) * 100 > 1
+            for: 5m
+            labels:
+              severity: critical
+              slo: error_rate
+            annotations:
+              summary: "High error rate on API Gateway"
+              description: "Error rate is {{ $value }}%, exceeding SLO of 1% for 5 minutes."
+
+          - alert: LLMServiceErrors
+            expr: |
+              (
+                sum(rate(llm_inference_requests_total{status="error"}[5m]))
+                /
+                sum(rate(llm_inference_requests_total[5m]))
+              ) * 100 > 2
+            for: 5m
+            labels:
+              severity: warning
+              slo: error_rate
+            annotations:
+              summary: "High error rate on LLM inference service"
+              description: "LLM error rate is {{ $value }}%, exceeding threshold for 5 minutes."
+
+          # SLO: Availability > 99.9%
+          - alert: ServiceDown
+            expr: up{job=~"api-gateway|llm-inference"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              slo: availability
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "Service {{ $labels.job }} on {{ $labels.kubernetes_pod_name }} has been down for more than 1 minute."
+
+          - alert: LowAvailability
+            expr: |
+              (
+                sum(rate(api_gateway_requests_total[5m]))
+                /
+                (sum(rate(api_gateway_requests_total[5m])) + sum(rate(api_gateway_requests_total{status=~"5.."}[5m])))
+              ) * 100 < 99.9
+            for: 5m
+            labels:
+              severity: critical
+              slo: availability
+            annotations:
+              summary: "Service availability below SLO"
+              description: "Service availability is {{ $value }}%, below SLO of 99.9%."
+
+      - name: ai_platform_resource_alerts
+        interval: 30s
+        rules:
+          # Resource utilization
+          - alert: HighMemoryUsage
+            expr: |
+              (
+                container_memory_working_set_bytes{namespace="ai-services"}
+                /
+                container_spec_memory_limit_bytes{namespace="ai-services"}
+              ) * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.pod }}"
+              description: "Memory usage is {{ $value }}% on pod {{ $labels.pod }}."
+
+          - alert: HighCPUUsage
+            expr: |
+              (
+                rate(container_cpu_usage_seconds_total{namespace="ai-services"}[5m])
+                /
+                container_spec_cpu_quota{namespace="ai-services"} * 100000
+              ) * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High CPU usage on {{ $labels.pod }}"
+              description: "CPU usage is {{ $value }}% on pod {{ $labels.pod }}."
+
+          # Pod restart alerts
+          - alert: PodRestartingFrequently
+            expr: rate(kube_pod_container_status_restarts_total{namespace="ai-services"}[15m]) > 0.1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} is restarting frequently"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted {{ $value }} times in the last 15 minutes."
+
+      - name: ai_platform_cost_optimization
+        interval: 1m
+        rules:
+          # Cost tracking metrics
+          - record: ai_platform:token_cost_estimate:rate5m
+            expr: |
+              sum(rate(llm_tokens_total{type="completion"}[5m])) * 0.002 / 1000
+              + sum(rate(llm_tokens_total{type="prompt"}[5m])) * 0.001 / 1000
+
+          - record: ai_platform:requests_per_minute:rate5m
+            expr: sum(rate(api_gateway_requests_total[5m])) * 60
+
+          - alert: HighTokenUsage
+            expr: rate(llm_tokens_total[5m]) > 10000
+            for: 10m
+            labels:
+              severity: info
+            annotations:
+              summary: "High token usage detected"
+              description: "Token usage rate is {{ $value }} tokens/sec, potentially indicating high cost."

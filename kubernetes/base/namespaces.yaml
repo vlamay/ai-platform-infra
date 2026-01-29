@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-services
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
