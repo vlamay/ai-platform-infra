@@ -33,7 +33,8 @@ jobs:
         run: |
           echo "Validating YAML syntax..."
           for file in $(find kubernetes -name '*.yaml' -type f); do
-            python3 -c "import yaml; yaml.safe_load(open('$file'))" || exit 1
+            echo "Checking $file"
+            python3 -c "import yaml; list(yaml.safe_load_all(open('$file')))" || exit 1
           done
 
   lint-python:
