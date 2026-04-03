@@ -1,76 +1,22 @@
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Terraform
-.terraform/
 *.tfstate
-*.tfstate.*
-.terraform.lock.hcl
-
-# Kubernetes
-*.kubeconfig
-
-# Secrets - NEVER commit!
-secret.yaml
-secrets.yaml
-*-secret.yaml
-*.key
+*.tfstate.backup
+.terraform/
+*.tfplan
 *.pem
+*.key
+*.p12
 .env
+*.env.*
 .env.local
-
-# Logs
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
 *.log
-logs/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-
-# Docker
-.dockerignore
-
-# Local development
-kind-config.yaml
-local-values.yaml
-
-# Monitoring data
-prometheus-data/
-grafana-data/
+node_modules/
+.npm/
+.venv/
+venv/

@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: llm-inference
-          image: ghcr.io/vlamay/llm-inference:latest
+          image: ghcr.io/vlamay/llm-inference:v1.2.0
           ports:
             - containerPort: 8001
           env:
